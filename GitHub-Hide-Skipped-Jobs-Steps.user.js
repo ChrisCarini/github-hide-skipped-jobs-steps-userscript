@@ -2,7 +2,7 @@
 // @name         GitHub Hide Skipped Jobs Steps
 // @author       Chris Carini
 // @namespace    chriscarini.com
-// @version      0.0.1
+// @version      0.0.2
 // @description  Find skipped steps in GitHub Actions and hide them.
 // @match        https://github.com/*/*/actions/runs/*
 // @icon         data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAyNCIgaGVpZ2h0PSIxMDI0IiB2aWV3Qm94PSIwIDAgMTAyNCAxMDI0IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cGF0aCBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZD0iTTggMEMzLjU4IDAgMCAzLjU4IDAgOEMwIDExLjU0IDIuMjkgMTQuNTMgNS40NyAxNS41OUM1Ljg3IDE1LjY2IDYuMDIgMTUuNDIgNi4wMiAxNS4yMUM2LjAyIDE1LjAyIDYuMDEgMTQuMzkgNi4wMSAxMy43MkM0IDE0LjA5IDMuNDggMTMuMjMgMy4zMiAxMi43OEMzLjIzIDEyLjU1IDIuODQgMTEuODQgMi41IDExLjY1QzIuMjIgMTEuNSAxLjgyIDExLjEzIDIuNDkgMTEuMTJDMy4xMiAxMS4xMSAzLjU3IDExLjcgMy43MiAxMS45NEM0LjQ0IDEzLjE1IDUuNTkgMTIuODEgNi4wNSAxMi42QzYuMTIgMTIuMDggNi4zMyAxMS43MyA2LjU2IDExLjUzQzQuNzggMTEuMzMgMi45MiAxMC42NCAyLjkyIDcuNThDMi45MiA2LjcxIDMuMjMgNS45OSAzLjc0IDUuNDNDMy42NiA1LjIzIDMuMzggNC40MSAzLjgyIDMuMzFDMy44MiAzLjMxIDQuNDkgMy4xIDYuMDIgNC4xM0M2LjY2IDMuOTUgNy4zNCAzLjg2IDguMDIgMy44NkM4LjcgMy44NiA5LjM4IDMuOTUgMTAuMDIgNC4xM0MxMS41NSAzLjA5IDEyLjIyIDMuMzEgMTIuMjIgMy4zMUMxMi42NiA0LjQxIDEyLjM4IDUuMjMgMTIuMyA1LjQzQzEyLjgxIDUuOTkgMTMuMTIgNi43IDEzLjEyIDcuNThDMTMuMTIgMTAuNjUgMTEuMjUgMTEuMzMgOS40NyAxMS41M0M5Ljc2IDExLjc4IDEwLjAxIDEyLjI2IDEwLjAxIDEzLjAxQzEwLjAxIDE0LjA4IDEwIDE0Ljk0IDEwIDE1LjIxQzEwIDE1LjQyIDEwLjE1IDE1LjY3IDEwLjU1IDE1LjU5QzEzLjcxIDE0LjUzIDE2IDExLjUzIDE2IDhDMTYgMy41OCAxMi40MiAwIDggMFoiIHRyYW5zZm9ybT0ic2NhbGUoNjQpIiBmaWxsPSIjMUIxRjIzIi8+Cjwvc3ZnPgo=
@@ -25,20 +25,11 @@ function getElements() {
 }
 
 function updateSkippedJobs() {
-  let areVisibleSkippedJobs = thereAreVisibleSkippedJobs();
   let settingMarkedShouldShowSkippedJobs = Boolean(window.localStorage.getItem(STORAGE_KEY_SHOULD_SHOW_SKIPPED_JOBS) === 'true');
 
-  debug(`show-skipped-jobs: ${settingMarkedShouldShowSkippedJobs}, and 'skipped jobs' ARE visible: ${areVisibleSkippedJobs}`);
-
-  if (settingMarkedShouldShowSkippedJobs === areVisibleSkippedJobs) {
-    debug("SKIP: Skipping updating 'skipped jobs'.");
-    return false;
-  }
-
-  debug("CHANGE: Updating 'skipped jobs'.")
-  let result = settingMarkedShouldShowSkippedJobs ? showSkippedJobs() : hideSkippedJobs();
-  debug("CHANGE: Updated 'skipped jobs'.")
-  return result;
+  debug(`show-skipped-jobs: ${settingMarkedShouldShowSkippedJobs}`);
+  settingMarkedShouldShowSkippedJobs ? showSkippedJobs() : hideSkippedJobs();
+  updateCogOptionsState(settingMarkedShouldShowSkippedJobs);
 }
 
 function showSkippedJobs() {
@@ -58,12 +49,16 @@ function modifySkippedJobs(hidden) {
     debug("No skipped steps found.")
     return true;
   }
-  elements.forEach((node) => node.hidden = hidden);
-  updateCogOptionsState();
+  elements.forEach((node) => {
+    // Avoid triggering the observer again for steps already in the desired state.
+    if (node.hidden !== hidden) {
+      node.hidden = hidden;
+    }
+  });
   return false;
 }
 
-function createCogElement(addAfterElement, text, shouldShowOption, storageSetting) {
+function createCogElement(addAfterElement, text, shouldShowOption) {
   const newElement = document.createElement("a");
   newElement.id = `github-hide-skipped-jobs-steps-cog-setting-${text}`;
   newElement.href = "";
@@ -72,12 +67,13 @@ function createCogElement(addAfterElement, text, shouldShowOption, storageSettin
   newElement.innerHTML = `${text[0].toUpperCase() + text.substring(1).toLowerCase()} Skipped Jobs`;
   newElement.hidden = !shouldShowOption;
 
-  newElement.addEventListener('click', () => {
+  newElement.addEventListener('click', (event) => {
+    event.preventDefault();
     debug(`============== ${text.toUpperCase()} CLICKED! Processing...... ==============`);
     let storageSetting = shouldShowOption;
     debug(`Setting STORAGE_KEY_SHOULD_SHOW_SKIPPED_JOBS to: ${storageSetting}`);
     window.localStorage.setItem(STORAGE_KEY_SHOULD_SHOW_SKIPPED_JOBS, storageSetting);
-    init();
+    updateSkippedJobs();
     debug(`============== ${text.toUpperCase()} CLICKED! DONE Processing. ==============`);
   });
 
@@ -86,45 +82,47 @@ function createCogElement(addAfterElement, text, shouldShowOption, storageSettin
   return newElement;
 }
 
-function thereAreVisibleSkippedJobs() {
-  let elements = getElements();
-  return Boolean(elements.length > 0 && elements[0].checkVisibility());
-}
-
 function addCogOptions() {
-  const a = document.getElementById(`github-hide-skipped-jobs-steps-cog-setting-show`);
-  const b = document.getElementById(`github-hide-skipped-jobs-steps-cog-setting-hide`);
-  if (a != null || b != null) {
+  let showSkippedEle = document.getElementById(`github-hide-skipped-jobs-steps-cog-setting-show`);
+  const hideSkippedEle = document.getElementById(`github-hide-skipped-jobs-steps-cog-setting-hide`);
+  if (showSkippedEle != null && hideSkippedEle != null) {
     debug("SKIP: Cog elements already exist.");
     return;
   }
 
   const addAfterElement = [...document.querySelectorAll("div.CheckRun-search > details > details-menu > a")].pop();
-  const showSkippedEle = createCogElement(addAfterElement, "show", true);
-  const hideSkippedEle = createCogElement(showSkippedEle, "hide", false);
+  if (addAfterElement == null) {
+    debug("SKIP: Cog menu is not available yet.");
+    return;
+  }
+  if (showSkippedEle == null) {
+    showSkippedEle = createCogElement(addAfterElement, "show", true);
+  }
+  if (hideSkippedEle == null) {
+    createCogElement(showSkippedEle, "hide", false);
+  }
   debug("CHANGE: Cog elements added.");
 }
 
-function updateCogOptionsState() {
+function updateCogOptionsState(shouldShowSkippedJobs) {
   const showButton = document.getElementById(`github-hide-skipped-jobs-steps-cog-setting-show`);
   const hideButton = document.getElementById(`github-hide-skipped-jobs-steps-cog-setting-hide`);
-  if (showButton == null && hideButton == null) {
+  if (showButton == null || hideButton == null) {
     debug("SKIP: Cog elements do not exist to update.");
     return;
   }
 
-  if (showButton.hidden === thereAreVisibleSkippedJobs() && hideButton.hidden === !thereAreVisibleSkippedJobs()) {
+  if (showButton.hidden === shouldShowSkippedJobs && hideButton.hidden === !shouldShowSkippedJobs) {
     debug("SKIP: Cog elements are already in the correct state.");
     return;
   }
 
-  if (!thereAreVisibleSkippedJobs()) {
-    debug("Show the 'show' button when there are NO visible skipped jobs.")
-  } else {
-    debug("Show the 'hide' button when there *ARE** visible skipped jobs.")
+  if (showButton.hidden !== shouldShowSkippedJobs) {
+    showButton.hidden = shouldShowSkippedJobs;
   }
-  showButton.hidden = thereAreVisibleSkippedJobs();
-  hideButton.hidden = !thereAreVisibleSkippedJobs();
+  if (hideButton.hidden !== !shouldShowSkippedJobs) {
+    hideButton.hidden = !shouldShowSkippedJobs;
+  }
   debug("CHANGE: Cog elements updated.");
 }
 
@@ -132,37 +130,20 @@ function init() {
   'use strict';
 
   debug('################################## USER SCRIPT STARTING ##################################');
-  // Initially, we want to hide the skipped jobs.
-  // window.localStorage.setItem(STORAGE_KEY_SHOULD_SHOW_SKIPPED_JOBS, false);
-  hideSkippedJobs();
+  addCogOptions();
+  updateSkippedJobs();
 
-  new MutationObserver((mutationList, observer) => {
-    debug('------------ application-main MUTATIONS FOUND. STARTING!!! ------------');
+  new MutationObserver(() => {
+    debug('------------ document MUTATIONS FOUND. STARTING!!! ------------');
     addCogOptions();
-    updateCogOptionsState();
-    updateSkippedJobs()
-    debug('------------ application-main MUTATIONS FOUND. COMPLETED!! ------------');
-  }).observe(document.querySelector("div.application-main"), {attributes: true, childList: true, subtree: true})
-
-  let keepCalling = true; // Flag to control the repeated calls
-  const timeoutId = setTimeout(() => {
-    keepCalling = false;
-    debug("Flag set to false, stopping the interval");
-  }, 10000);
-
-  function startInterval() {
-    const intervalId = setInterval(() => {
-      if (keepCalling) {
-        keepCalling = updateSkippedJobs();
-      } else {
-        debug("Clearing interval and timeout");
-        clearInterval(intervalId);
-        clearTimeout(timeoutId)
-      }
-    }, 500);
-  }
-
-  startInterval();
+    updateSkippedJobs();
+    debug('------------ document MUTATIONS FOUND. COMPLETED!! ------------');
+  }).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-conclusion', 'hidden'],
+    childList: true,
+    subtree: true
+  });
 }
 
 init();
